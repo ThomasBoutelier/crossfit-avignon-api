@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create vite@latest . -- --template react-ts)",
+      "Bash(npx create-vite@latest . --template react-ts --force)",
+      "Bash(npm install)",
+      "Bash(npm run build)",
+      "Bash(pip install python-jose[cryptography]==3.3.0 passlib[bcrypt]==1.7.4 python-multipart==0.0.20)",
+      "Bash(.venv/bin/pip install \"bcrypt==4.0.1\")",
+      "Bash(.venv/bin/pip show bcrypt)",
+      "Bash(.venv/bin/python -c \":*)"
+    ]
+  }
+}

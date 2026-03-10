@@ -1,0 +1,124 @@
+-- 1) enums (optionnel mais propre)
+DO $$ BEGIN
+  CREATE TYPE lead_status AS ENUM (
+    'new',             -- vient de s'inscrire
+    'to_call',         -- à rappeler
+    'contacted',       -- contacté par l'équipe
+    'trial_scheduled',
+    'trial_done',
+    'converted',       -- devenu membre
+    'lost'             -- perdu/refus
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+-- Ajouter 'to_call' si la base existante ne l'a pas encore
+DO $$ BEGIN
+  ALTER TYPE lead_status ADD VALUE IF NOT EXISTS 'to_call' AFTER 'new';
+EXCEPTION
+  WHEN others THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE sport_experience AS ENUM (
+    'debutant',
+    'sportif',
+    'confirme',
+    'crossfit'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+-- 2) leads
+CREATE TABLE IF NOT EXISTS leads (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  prenom            TEXT NOT NULL,
+  nom               TEXT NOT NULL,
+  email             TEXT NOT NULL,
+  telephone         TEXT NULL,
+  experience        sport_experience NULL,
+  message           TEXT NULL,
+
+  -- source "déclarée" (si tu veux en plus des UTM)
+  source            TEXT NULL, -- ex: "site", "instagram", "telephone", "pub"
+
+  -- tracking marketing
+  utm_source        TEXT NULL,
+  utm_medium        TEXT NULL,
+  utm_campaign      TEXT NULL,
+  utm_content       TEXT NULL,
+  utm_term          TEXT NULL,
+  referrer          TEXT NULL,
+  landing_url       TEXT NULL,
+
+  -- infos techniques (utile anti-spam / stats)
+  ip_address        INET NULL,
+  user_agent        TEXT NULL,
+
+  status            lead_status NOT NULL DEFAULT 'new',
+  lost_reason       TEXT NULL,
+  notes             TEXT NULL,
+  next_action_date  DATE NULL,
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- éviter les doublons simples
+  CONSTRAINT leads_email_unique UNIQUE (email)
+);
+
+-- Migrations pour bases existantes
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS notes TEXT NULL;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS next_action_date DATE NULL;
+
+-- index utiles
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);
+CREATE INDEX IF NOT EXISTS idx_leads_utm_source ON leads(utm_source);
+CREATE INDEX IF NOT EXISTS idx_leads_utm_campaign ON leads(utm_campaign);
+
+-- 3) lead_events (historique)
+CREATE TABLE IF NOT EXISTS lead_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id       UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+
+  event_type    TEXT NOT NULL,   -- ex: "created", "contacted", "trial_scheduled", ...
+  event_note    TEXT NULL,       -- note libre
+  event_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  created_by    TEXT NULL        -- futur: user id admin
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_events_lead_id ON lead_events(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_events_event_at ON lead_events(event_at);
+
+-- 4) trigger updated_at
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_leads_updated_at ON leads;
+CREATE TRIGGER trg_leads_updated_at
+BEFORE UPDATE ON leads
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+-- 5) users (comptes CRM)
+CREATE TABLE IF NOT EXISTS users (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email            TEXT NOT NULL,
+  hashed_password  TEXT NOT NULL,
+  is_active        BOOLEAN NOT NULL DEFAULT true,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT users_email_unique UNIQUE (email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
