@@ -7,8 +7,9 @@ import type {
 } from "@/types/lead";
 import { authStore } from "./auth";
 
-const BASE_URL = "/v1/leads";
-const AUTH_URL = "/v1/auth";
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
+const BASE_URL = `${API_BASE}/v1/leads`;
+const AUTH_URL = `${API_BASE}/v1/auth`;
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = authStore.getToken();
